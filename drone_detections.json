@@ -1,0 +1,84 @@
+[
+  {
+    "timestamp": "2025-12-15T14:07:52.737542",
+    "unix_time": 1765804072.7375493,
+    "frequency_band": {
+      "start": 2403159153.7,
+      "end": 2479839126.7,
+      "center": 2441499140.2
+    },
+    "strongest_signal": {
+      "frequency": 2458869134.0838027,
+      "power": -54.2,
+      "bandwidth": 359999.8732394366,
+      "in_drone_band": true,
+      "band_name": "2.4GHz_control",
+      "band_type": "control",
+      "is_burst": false,
+      "burst_confidence": 0,
+      "drone_score": 50,
+      "detection_reasons": [
+        "In 2.4GHz_control drone band"
+      ]
+    },
+    "total_signals": 1,
+    "confidence": 50,
+    "all_detections": [
+      {
+        "frequency": 2458869134.0838027,
+        "power": -54.2,
+        "bandwidth": 359999.8732394366,
+        "in_drone_band": true,
+        "band_name": "2.4GHz_control",
+        "band_type": "control",
+        "is_burst": false,
+        "burst_confidence": 0,
+        "drone_score": 50,
+        "detection_reasons": [
+          "In 2.4GHz_control drone band"
+        ]
+      }
+    ]
+  },
+  {
+    "timestamp": "2025-12-15T14:08:13.977552",
+    "unix_time": 1765804093.9775589,
+    "frequency_band": {
+      "start": 2403159153.7,
+      "end": 2479839126.7,
+      "center": 2441499140.2
+    },
+    "strongest_signal": {
+      "frequency": 2470006630.1621475,
+      "power": -53.49,
+      "bandwidth": 674999.7623239437,
+      "in_drone_band": true,
+      "band_name": "2.4GHz_control",
+      "band_type": "control",
+      "is_burst": false,
+      "burst_confidence": 0,
+      "drone_score": 50,
+      "detection_reasons": [
+        "In 2.4GHz_control drone band"
+      ]
+    },
+    "total_signals": 1,
+    "confidence": 50,
+    "all_detections": [
+      {
+        "frequency": 2470006630.1621475,
+        "power": -53.49,
+        "bandwidth": 674999.7623239437,
+        "in_drone_band": true,
+        "band_name": "2.4GHz_control",
+        "band_type": "control",
+        "is_burst": false,
+        "burst_confidence": 0,
+        "drone_score": 50,
+        "detection_reasons": [
+          "In 2.4GHz_control drone band"
+        ]
+      }
+    ]
+  }
+]
