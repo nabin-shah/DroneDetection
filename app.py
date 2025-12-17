@@ -25,7 +25,7 @@ if __name__ == '__main__':
     
     # Initialize camera on startup
     print("\n[1/2] Initializing camera...")
-    init_camera(0)
+    # init_camera(0)
     
     print("\n[2/2] Starting Flask server...")
     print("\nDashboard: http://localhost:5000")

@@ -1,160 +1,100 @@
 """
-Camera capture functionality
+Simplified Camera Module - Tested & Working
 """
 import cv2
-import os
 import base64
+import os
 from datetime import datetime
 
-# Camera configuration
+# Camera globals
 camera = None
 camera_enabled = False
 CAPTURE_FOLDER = 'drone_captures'
 
-# Create captures folder
 if not os.path.exists(CAPTURE_FOLDER):
     os.makedirs(CAPTURE_FOLDER)
 
 def init_camera(camera_index=0):
     """Initialize webcam"""
     global camera, camera_enabled
+    
     try:
-        # Use DirectShow backend for Windows (better compatibility)
         camera = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
-        
-        # Set resolution
         camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         
         if camera.isOpened():
-            # Test frame capture
+            # Test one frame
             ret, test_frame = camera.read()
-            if ret:
+            if ret and test_frame is not None:
                 camera_enabled = True
-                print(f"[Camera] Initialized camera {camera_index} - {test_frame.shape[1]}x{test_frame.shape[0]}")
+                print(f"✅ [Camera] Initialized 640x480")
                 return True
-            else:
-                print(f"[Camera] Camera opened but can't read frames")
-                camera.release()
-                camera_enabled = False
-                return False
-        else:
-            print(f"[Camera] Failed to open camera {camera_index}")
-            camera_enabled = False
-            return False
-            
+        print("❌ [Camera] Failed to capture test frame")
+        return False
+        
     except Exception as e:
-        print(f"[Camera] Error: {e}")
-        camera_enabled = False
+        print(f"❌ [Camera] Init error: {e}")
         return False
 
 def get_camera_frame():
-    """Get current camera frame as base64 for live preview"""
+    """Get current camera frame - EXACTLY like standalone test"""
     global camera, camera_enabled
     
-    if not camera_enabled:
-        print("[Camera] Camera not enabled")
+    if not camera_enabled or camera is None or not camera.isOpened():
         return None
-    
-    if camera is None:
-        print("[Camera] Camera object is None")
-        return None
-    
-    if not camera.isOpened():
-        print("[Camera] Camera not opened, attempting to reinitialize...")
-        init_camera(0)
-        if not camera_enabled:
-            return None
     
     try:
+        # EXACT SAME LOGIC AS WORKING STANDALONE TEST
         ret, frame = camera.read()
         
-        if not ret:
-            print("[Camera] Failed to read frame")
+        if not ret or frame is None:
             return None
         
-        # Resize for web display (smaller = faster)
+        # Resize to 640x480 for web (exactly like standalone)
         frame = cv2.resize(frame, (640, 480))
         
-        # Convert to JPEG
-        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        # Encode JPEG directly (no fancy params that might break)
+        _, buffer = cv2.imencode('.jpg', frame)
         
-        if not ret:
-            print("[Camera] Failed to encode frame")
-            return None
-        
-        # Convert to base64
+        # Base64 encode
         jpg_as_text = base64.b64encode(buffer).decode('utf-8')
         return f"data:image/jpeg;base64,{jpg_as_text}"
         
     except Exception as e:
-        print(f"[Camera] Frame capture error: {e}")
+        print(f"❌ [Camera] Frame error: {e}")
         return None
 
 def capture_image(detection_data):
-    """Capture image from webcam when drone is detected"""
-    global camera, camera_enabled
-    
-    if not camera_enabled or camera is None:
-        print("[Camera] Camera not available for capture")
+    """Save detection image"""
+    if not camera_enabled:
         return None
     
     try:
         ret, frame = camera.read()
-        
         if not ret:
-            print("[Camera] Failed to capture frame for detection")
             return None
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"drone_{timestamp}.jpg"
         filepath = os.path.join(CAPTURE_FOLDER, filename)
         
-        strongest = detection_data.get('strongest', {})
+        # Overlay detection info
+        cv2.putText(frame, "DRONE DETECTED!", (10, 30), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
         
-        # Add detection info overlay
-        cv2.putText(frame, "DRONE DETECTED", (10, 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-        cv2.putText(frame, f"Freq: {strongest.get('frequency', 0)/1e9:.3f} GHz", (10, 70),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(frame, f"Power: {strongest.get('power', 0):.1f} dBm", (10, 110),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(frame, f"Score: {strongest.get('drone_score', 0)}", (10, 150),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(frame, timestamp, (10, 190),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        
-        # Save image
         cv2.imwrite(filepath, frame)
-        print(f"[Camera] Captured detection image: {filepath}")
-        
+        print(f"💾 [Camera] Saved: {filename}")
         return filename
         
     except Exception as e:
-        print(f"[Camera] Detection capture error: {e}")
+        print(f"❌ [Camera] Capture error: {e}")
         return None
 
 def get_camera_status():
-    """Get current camera status"""
-    status = {
+    """Camera status"""
+    return {
         'enabled': camera_enabled,
-        'available': camera is not None
+        'available': camera is not None,
+        'opened': camera.isOpened() if camera else False
     }
-    
-    if camera is not None:
-        status['is_opened'] = camera.isOpened()
-    else:
-        status['is_opened'] = False
-    
-    return status
-
-def release_camera():
-    """Release camera resources"""
-    global camera, camera_enabled
-    
-    if camera is not None:
-        camera.release()
-        print("[Camera] Camera released")
-    
-    camera = None
-    camera_enabled = False

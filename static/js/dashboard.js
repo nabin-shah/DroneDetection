@@ -6,61 +6,112 @@ let connectionErrorCount = 0;
 let goodDataCount = 0;
 let currentStatus = 'unknown';
 
-// Camera Functions
-function updateCameraPreview() {
-    fetch('/api/camera/preview')
-        .then(response => response.json())
-        .then(data => {
-            const img = document.getElementById('cameraPreview');
-            const placeholder = document.getElementById('cameraPlaceholder');
-            const statusText = document.getElementById('cameraStatusText');
+
+// ========================================
+// NATIVE CAMERA - PROVEN WORKING VERSION
+// ========================================
+let myStream = null;
+
+function startCam() {
+    console.log('Starting camera...');
+    const video = document.getElementById('myVideo');
+    const placeholder = document.getElementById('cameraPlaceholder');
+    const statusText = document.getElementById('cameraStatusText');
+    
+    if (statusText) statusText.textContent = 'Requesting access...';
+    
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+        .then(function(stream) {
+            myStream = stream;
+            video.srcObject = stream;
             
-            console.log('Camera data received:', data.image ? 'YES' : 'NO');
-            
-            if (data.image) {
-                // Set image source
-                img.src = data.image;
-                
-                // Show image, hide placeholder
-                img.style.display = 'block';
-                placeholder.style.display = 'none';
-                
-                // Update status
+            if (placeholder) placeholder.style.display = 'none';
+            if (statusText) {
                 statusText.textContent = 'Status: Active ✓';
                 statusText.style.color = '#00ff00';
-                
-                console.log('Camera preview updated successfully');
-            } else {
-                // Hide image, show placeholder
-                img.style.display = 'none';
-                placeholder.style.display = 'flex';
-                
-                statusText.textContent = 'Status: No feed';
-                statusText.style.color = '#ff4444';
-                
-                console.log('No camera image data');
             }
+            
+            console.log('✅ Camera started successfully!');
         })
-        .catch(err => {
-            console.error('Camera preview error:', err);
+        .catch(function(error) {
+            console.error('❌ Camera error:', error);
             
-            const placeholder = document.getElementById('cameraPlaceholder');
-            const img = document.getElementById('cameraPreview');
-            const statusText = document.getElementById('cameraStatusText');
+            if (statusText) {
+                statusText.textContent = 'Status: Access Denied';
+                statusText.style.color = '#ff4444';
+            }
             
-            placeholder.style.display = 'flex';
-            img.style.display = 'none';
-            statusText.textContent = 'Status: Error';
-            statusText.style.color = '#ff4444';
+            alert('Camera access denied!\n\nError: ' + error.message + '\n\nFix:\n1. Click 🔒 in address bar\n2. Allow camera\n3. Refresh page');
         });
 }
 
-
-
-
-function refreshCamera() {
-    updateCameraPreview();
+function stopCam() {
+    const video = document.getElementById('myVideo');
+    const placeholder = document.getElementById('cameraPlaceholder');
+    const statusText = document.getElementById('cameraStatusText');
+    
+    if (myStream) {
+        myStream.getTracks().forEach(function(track) {
+            track.stop();
+        });
+        myStream = null;
+    }
+    
+    if (video) video.srcObject = null;
+    if (placeholder) placeholder.style.display = 'flex';
+    if (statusText) {
+        statusText.textContent = 'Status: Stopped';
+        statusText.style.color = '#888';
+    }
+    
+    console.log('Camera stopped');
 }
+
+function takePhoto() {
+    if (!myStream) {
+        alert('Start camera first!');
+        return;
+    }
+    
+    const video = document.getElementById('myVideo');
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    
+    // Get image as base64
+    const imageData = canvas.toDataURL('image/jpeg', 0.95);
+    
+    // Save to server
+    fetch('/api/camera/manual_capture', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ image: imageData })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('✅ Photo saved:', data.filename);
+            
+            // Also download to PC
+            const link = document.createElement('a');
+            link.download = data.filename;
+            link.href = imageData;
+            link.click();
+            
+            // Refresh captures display
+            setTimeout(loadManualCaptures, 500);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+
+
 
 function updateRecentCaptures() {
     fetch('/api/detection_history')
@@ -103,6 +154,47 @@ function updateRecentCaptures() {
         })
         .catch(err => console.error('Captures error:', err));
 }
+
+
+
+function loadManualCaptures() {
+    fetch('/api/captures_list')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('recentCaptures');
+            
+            if (!data.captures || data.captures.length === 0) {
+                container.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">No captures yet</p>';
+                return;
+            }
+            
+            let html = '';
+            data.captures.forEach(capture => {
+                html += `
+                    <div style="margin: 10px 0; padding: 10px; background: #1a1a1a; border-radius: 5px;">
+                        <img src="/api/captures/${capture.filename}" 
+                             onclick="window.open('/api/captures/${capture.filename}', '_blank')"
+                             title="Click to view full size"
+                             style="width: 100%; cursor: pointer; border-radius: 5px; margin-bottom: 5px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                            <span style="color: #00ff00;">${capture.time}</span>
+                            <span style="color: #aaa;">${capture.type}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        })
+        .catch(err => console.error('Captures error:', err));
+}
+
+
+
+
+
+
+
 
 // Scan Control Functions
 function updateScanStatus() {
@@ -292,8 +384,10 @@ document.addEventListener('DOMContentLoaded', function() {
     updateScanStatus();
     setInterval(updateScanStatus, 2000);
     
-    updateCameraPreview();
-    setInterval(updateCameraPreview, 2000);
+    // updateCameraPreview();
+    // setInterval(updateCameraPreview, 2000);
+     loadManualCaptures();
+    setInterval(loadManualCaptures, 5000);
     
     updateRecentCaptures();
     setInterval(updateRecentCaptures, 5000);

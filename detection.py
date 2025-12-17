@@ -1,32 +1,170 @@
 """
-Drone detection algorithm
+Enhanced Drone Detection Algorithm
+Based on Aaronia RTSA Suite PRO Drone Profiles
 """
+
 from collections import deque
 import time
 
 # Detection parameters
 NOISE_FLOOR = -100  # dBm
-DETECTION_THRESHOLD = -70  # dBm
+DETECTION_THRESHOLD = -70  # dBm (adjust based on testing)
 MIN_SIGNAL_WIDTH = 10
 BURST_DETECTION_WINDOW = 10
 
 # Store recent power measurements to detect burst patterns
 signal_history = {}
 
-# Drone frequency bands (in Hz)
-DRONE_BANDS = {
-    '2.4GHz_control': {'start': 2.400e9, 'end': 2.483e9, 'type': 'control'},
-    '5.8GHz_video': {'start': 5.725e9, 'end': 5.875e9, 'type': 'video'},
-    '900MHz': {'start': 902e6, 'end': 928e6, 'type': 'control'},
-    '433MHz': {'start': 433e6, 'end': 434e6, 'type': 'control'}
+# Professional Drone Frequency Profiles (From Aaronia RTSA Suite PRO)
+DRONE_PROFILES = {
+    # ===== VIDEO TRANSMISSION SYSTEMS =====
+    'DJI_Lightbridge_5.8GHz': {
+        'start': 5.720e9,
+        'end': 5.880e9,
+        'type': 'video',
+        'bandwidth_range': (20e6, 40e6),  # Typical 20-40 MHz channels
+        'manufacturer': 'DJI',
+        'description': 'DJI Lightbridge HD video transmission (5.8GHz)',
+        'confidence_boost': 30,
+        'power_range': (-75, -30)  # Typical power levels
+    },
+    
+    'DJI_Lightbridge_2.4GHz': {
+        'start': 2.280e9,
+        'end': 2.600e9,
+        'type': 'video',
+        'bandwidth_range': (20e6, 40e6),
+        'manufacturer': 'DJI',
+        'description': 'DJI Lightbridge HD video transmission (2.4GHz)',
+        'confidence_boost': 25,
+        'power_range': (-75, -30)
+    },
+    
+    '1.2GHz_Video': {
+        'start': 990e6,
+        'end': 1.300e9,
+        'type': 'video',
+        'bandwidth_range': (5e6, 30e6),  # Analog FPV typically 5-20 MHz
+        'manufacturer': 'Generic',
+        'description': '1.2GHz Analog FPV Video Transmitter',
+        'confidence_boost': 20,
+        'power_range': (-80, -35)
+    },
+    
+    # ===== CONTROL SYSTEMS =====
+    'DJI_Phantom_Control': {
+        'start': 2.400e9,
+        'end': 2.483e9,
+        'type': 'control',
+        'bandwidth_range': (20e6, 80e6),  # WiFi-based, wider bandwidth
+        'manufacturer': 'DJI',
+        'description': 'DJI Phantom/Mavic RC Control (All models)',
+        'confidence_boost': 35,
+        'power_range': (-70, -25)
+    },
+    
+    'JETI_Dual_Band_2.4GHz': {
+        'start': 2.400e9,
+        'end': 2.483e9,
+        'type': 'control',
+        'bandwidth_range': (1e6, 20e6),  # Narrow band RC
+        'manufacturer': 'JETI',
+        'description': 'JETI DC-24 Dual Band RC (2.4GHz)',
+        'confidence_boost': 25,
+        'power_range': (-75, -30)
+    },
+    
+    'JETI_Dual_Band_868MHz': {
+        'start': 863.7e6,
+        'end': 869.0e6,
+        'type': 'control',
+        'bandwidth_range': (200e3, 5e6),  # Very narrow band
+        'manufacturer': 'JETI',
+        'description': 'JETI DC-24 Dual Band RC (868MHz EU)',
+        'confidence_boost': 30,
+        'power_range': (-80, -35)
+    },
+    
+    '915MHz_ISM': {
+        'start': 902e6,
+        'end': 928e6,
+        'type': 'control',
+        'bandwidth_range': (500e3, 10e6),
+        'manufacturer': 'Generic',
+        'description': '915MHz ISM Band RC Control (US)',
+        'confidence_boost': 25,
+        'power_range': (-80, -30)
+    },
+    
+    'AD223_900MHz': {
+        'start': 893e6,
+        'end': 1.020e9,
+        'type': 'control',
+        'bandwidth_range': (1e6, 20e6),
+        'manufacturer': 'Generic',
+        'description': 'AD223 900MHz Long Range RC',
+        'confidence_boost': 20,
+        'power_range': (-85, -35)
+    },
+    
+    '433MHz_ISM': {
+        'start': 433e6,
+        'end': 434.8e6,
+        'type': 'control',
+        'bandwidth_range': (100e3, 2e6),  # Very narrow
+        'manufacturer': 'Generic',
+        'description': '433MHz ISM Long Range RC',
+        'confidence_boost': 25,
+        'power_range': (-90, -40)
+    }
 }
 
-def is_in_drone_band(frequency):
-    """Check if frequency is in known drone bands"""
-    for band_name, band_info in DRONE_BANDS.items():
-        if band_info['start'] <= frequency <= band_info['end']:
-            return True, band_name, band_info['type']
-    return False, None, None
+
+def match_drone_profile(frequency, bandwidth, power):
+    """
+    Match signal characteristics against known drone profiles
+    Returns: (matched, profile_name, profile_data, confidence)
+    """
+    best_match = None
+    best_confidence = 0
+    
+    for profile_name, profile in DRONE_PROFILES.items():
+        # Check if frequency is in range
+        if not (profile['start'] <= frequency <= profile['end']):
+            continue
+        
+        confidence = 0
+        
+        # Frequency match (base score)
+        confidence += 30
+        
+        # Bandwidth match
+        bw_min, bw_max = profile['bandwidth_range']
+        if bw_min <= bandwidth <= bw_max:
+            confidence += 30
+        elif bandwidth < bw_min * 2 or bandwidth > bw_max * 0.5:
+            # Close but not perfect
+            confidence += 15
+        
+        # Power level match
+        pwr_min, pwr_max = profile['power_range']
+        if pwr_min <= power <= pwr_max:
+            confidence += 20
+        elif power > pwr_max:  # Too strong (nearby drone)
+            confidence += 25
+        
+        # Apply profile-specific confidence boost
+        confidence += profile['confidence_boost']
+        
+        if confidence > best_confidence:
+            best_confidence = confidence
+            best_match = (True, profile_name, profile, confidence)
+    
+    if best_match:
+        return best_match
+    
+    return (False, None, None, 0)
+
 
 def detect_burst_pattern(freq_key, current_power, history_window=10):
     """Detect burst patterns characteristic of drone signals"""
@@ -44,9 +182,10 @@ def detect_burst_pattern(freq_key, current_power, history_window=10):
     min_power = min(powers)
     power_variation = max_power - min_power
     
-    has_variation = power_variation > 15
+    # Detect characteristics
+    has_variation = power_variation > 15  # Power changes (moving drone)
     is_burst_active = current_power > (avg_power + 10)
-    not_continuous = power_variation > 5
+    not_continuous = power_variation > 5  # Not constant signal
     
     confidence = 0
     if has_variation:
@@ -57,10 +196,14 @@ def detect_burst_pattern(freq_key, current_power, history_window=10):
         confidence += 30
     
     is_burst = has_variation and not_continuous
+    
     return is_burst, confidence
 
+
 def analyze_for_drones(spectrum_data):
-    """Advanced drone detection using signal characteristics"""
+    """
+    Enhanced drone detection using professional profiles from Aaronia RTSA Suite PRO
+    """
     if 'samples' not in spectrum_data or not spectrum_data['samples']:
         return {'detected': False, 'reason': 'No data'}
     
@@ -68,7 +211,6 @@ def analyze_for_drones(spectrum_data):
     start_freq = spectrum_data['startFrequency']
     end_freq = spectrum_data['endFrequency']
     sample_size = spectrum_data['sampleSize']
-    
     freq_step = (end_freq - start_freq) / sample_size
     
     detections = []
@@ -77,6 +219,7 @@ def analyze_for_drones(spectrum_data):
     peak_frequency = 0
     start_idx = 0
     
+    # Scan through spectrum
     for idx, power in enumerate(samples):
         current_freq = start_freq + (idx * freq_step)
         
@@ -90,47 +233,60 @@ def analyze_for_drones(spectrum_data):
                 peak_frequency = current_freq
         else:
             if consecutive_count >= MIN_SIGNAL_WIDTH:
+                # Signal detected - analyze it
                 center_freq = start_freq + ((start_idx + idx) / 2 * freq_step)
                 signal_bandwidth = consecutive_count * freq_step
                 
-                in_drone_band, band_name, band_type = is_in_drone_band(center_freq)
+                # Match against professional drone profiles
+                matched, profile_name, profile_data, profile_confidence = match_drone_profile(
+                    center_freq, signal_bandwidth, peak_power
+                )
+                
+                # Burst pattern detection
                 freq_key = f"{int(center_freq/1e6)}"
                 is_burst, burst_confidence = detect_burst_pattern(freq_key, peak_power)
                 
+                # Build detection characteristics
                 characteristics = {
                     'frequency': center_freq,
                     'power': peak_power,
                     'bandwidth': signal_bandwidth,
-                    'in_drone_band': in_drone_band,
-                    'band_name': band_name if in_drone_band else 'Unknown',
-                    'band_type': band_type if in_drone_band else 'Unknown',
+                    'matched_profile': matched,
+                    'profile_name': profile_name if matched else 'Unknown',
+                    'profile_description': profile_data['description'] if matched else 'Unknown signal',
+                    'manufacturer': profile_data['manufacturer'] if matched else 'Unknown',
+                    'signal_type': profile_data['type'] if matched else 'unknown',
                     'is_burst': is_burst,
                     'burst_confidence': burst_confidence
                 }
                 
+                # Calculate confidence score
                 drone_score = 0
                 reasons = []
                 
-                if in_drone_band:
-                    drone_score += 50
-                    reasons.append(f"In {band_name} drone band")
+                if matched:
+                    drone_score += profile_confidence
+                    reasons.append(f"Matches {profile_name} profile ({profile_confidence}% confidence)")
+                    reasons.append(f"Manufacturer: {profile_data['manufacturer']}")
+                    reasons.append(f"Type: {profile_data['type'].upper()}")
                 
                 if is_burst:
-                    drone_score += 30
+                    drone_score += 20
                     reasons.append(f"Burst pattern detected ({burst_confidence}% confidence)")
                 
+                # Bandwidth validation
                 bw_mhz = signal_bandwidth / 1e6
-                if band_type == 'video' and 5 <= bw_mhz <= 30:
-                    drone_score += 20
-                    reasons.append(f"Video signal bandwidth ({bw_mhz:.1f} MHz)")
-                elif band_type == 'control' and 20 <= bw_mhz <= 90:
-                    drone_score += 20
-                    reasons.append(f"Control signal bandwidth ({bw_mhz:.1f} MHz)")
+                if matched and profile_data:
+                    bw_min, bw_max = profile_data['bandwidth_range']
+                    if bw_min/1e6 <= bw_mhz <= bw_max/1e6:
+                        drone_score += 20
+                        reasons.append(f"Bandwidth matches: {bw_mhz:.1f} MHz")
                 
-                characteristics['drone_score'] = drone_score
+                characteristics['drone_score'] = min(drone_score, 100)  # Cap at 100%
                 characteristics['detection_reasons'] = reasons
                 
-                if drone_score >= 70:
+                # Lower threshold: 50% confidence (was 70%)
+                if drone_score >= 50:
                     detections.append(characteristics)
             
             consecutive_count = 0
@@ -141,7 +297,10 @@ def analyze_for_drones(spectrum_data):
         center_freq = start_freq + ((start_idx + len(samples)) / 2 * freq_step)
         signal_bandwidth = consecutive_count * freq_step
         
-        in_drone_band, band_name, band_type = is_in_drone_band(center_freq)
+        matched, profile_name, profile_data, profile_confidence = match_drone_profile(
+            center_freq, signal_bandwidth, peak_power
+        )
+        
         freq_key = f"{int(center_freq/1e6)}"
         is_burst, burst_confidence = detect_burst_pattern(freq_key, peak_power)
         
@@ -149,9 +308,11 @@ def analyze_for_drones(spectrum_data):
             'frequency': center_freq,
             'power': peak_power,
             'bandwidth': signal_bandwidth,
-            'in_drone_band': in_drone_band,
-            'band_name': band_name if in_drone_band else 'Unknown',
-            'band_type': band_type if in_drone_band else 'Unknown',
+            'matched_profile': matched,
+            'profile_name': profile_name if matched else 'Unknown',
+            'profile_description': profile_data['description'] if matched else 'Unknown signal',
+            'manufacturer': profile_data['manufacturer'] if matched else 'Unknown',
+            'signal_type': profile_data['type'] if matched else 'unknown',
             'is_burst': is_burst,
             'burst_confidence': burst_confidence
         }
@@ -159,26 +320,19 @@ def analyze_for_drones(spectrum_data):
         drone_score = 0
         reasons = []
         
-        if in_drone_band:
-            drone_score += 50
-            reasons.append(f"In {band_name} drone band")
+        if matched:
+            drone_score += profile_confidence
+            reasons.append(f"Matches {profile_name} profile ({profile_confidence}% confidence)")
+            reasons.append(f"Manufacturer: {profile_data['manufacturer']}")
         
         if is_burst:
-            drone_score += 30
-            reasons.append(f"Burst pattern detected ({burst_confidence}% confidence)")
-        
-        bw_mhz = signal_bandwidth / 1e6
-        if band_type == 'video' and 5 <= bw_mhz <= 30:
             drone_score += 20
-            reasons.append(f"Video signal bandwidth ({bw_mhz:.1f} MHz)")
-        elif band_type == 'control' and 20 <= bw_mhz <= 90:
-            drone_score += 20
-            reasons.append(f"Control signal bandwidth ({bw_mhz:.1f} MHz)")
+            reasons.append(f"Burst pattern ({burst_confidence}%)")
         
-        characteristics['drone_score'] = drone_score
+        characteristics['drone_score'] = min(drone_score, 100)
         characteristics['detection_reasons'] = reasons
         
-        if drone_score >= 70:
+        if drone_score >= 50:
             detections.append(characteristics)
     
     if detections:
