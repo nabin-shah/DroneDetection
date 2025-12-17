@@ -1,6 +1,6 @@
 """
 Enhanced Drone Detection Algorithm
-Based on Aaronia RTSA Suite PRO Drone Profiles
+Based on Aaronia RTSA Suite PRO Drone Profiles + Industry Standards
 """
 
 from collections import deque
@@ -15,107 +15,144 @@ BURST_DETECTION_WINDOW = 10
 # Store recent power measurements to detect burst patterns
 signal_history = {}
 
-# Professional Drone Frequency Profiles (From Aaronia RTSA Suite PRO)
+# PROFESSIONAL DRONE FREQUENCY PROFILES
+# Based on Aaronia RTSA Suite PRO profiles + industry standards
 DRONE_PROFILES = {
     # ===== VIDEO TRANSMISSION SYSTEMS =====
-    'DJI_Lightbridge_5.8GHz': {
+    'dji_lightbridge_5800': {
         'start': 5.720e9,
         'end': 5.880e9,
         'type': 'video',
-        'bandwidth_range': (20e6, 40e6),  # Typical 20-40 MHz channels
+        'bandwidth_range': (20e6, 80e6),  # DJI Lightbridge uses 20-40 MHz channels
         'manufacturer': 'DJI',
-        'description': 'DJI Lightbridge HD video transmission (5.8GHz)',
-        'confidence_boost': 30,
-        'power_range': (-75, -30)  # Typical power levels
-    },
-    
-    'DJI_Lightbridge_2.4GHz': {
-        'start': 2.280e9,
-        'end': 2.600e9,
-        'type': 'video',
-        'bandwidth_range': (20e6, 40e6),
-        'manufacturer': 'DJI',
-        'description': 'DJI Lightbridge HD video transmission (2.4GHz)',
-        'confidence_boost': 25,
+        'description': 'DJI Lightbridge 5.8GHz HD Video',
+        'confidence_boost': 35,
         'power_range': (-75, -30)
     },
     
-    '1.2GHz_Video': {
+    'dji_lightbridge_2400': {
+        'start': 2.280e9,
+        'end': 2.600e9,
+        'type': 'video',
+        'bandwidth_range': (20e6, 80e6),
+        'manufacturer': 'DJI',
+        'description': 'DJI Lightbridge 2.4GHz Video',
+        'confidence_boost': 30,
+        'power_range': (-75, -30)
+    },
+    
+    '1200mhz_videotransmitter': {
         'start': 990e6,
         'end': 1.300e9,
         'type': 'video',
         'bandwidth_range': (5e6, 30e6),  # Analog FPV typically 5-20 MHz
         'manufacturer': 'Generic',
-        'description': '1.2GHz Analog FPV Video Transmitter',
-        'confidence_boost': 20,
+        'description': '1.2GHz Analog FPV Video',
+        'confidence_boost': 25,
         'power_range': (-80, -35)
     },
     
-    # ===== CONTROL SYSTEMS =====
-    'DJI_Phantom_Control': {
+    # ===== DJI CONTROL SYSTEMS (2.4 GHz) =====
+    'dji_phantom_1_2_rc_channels_2400': {
         'start': 2.400e9,
         'end': 2.483e9,
         'type': 'control',
-        'bandwidth_range': (20e6, 80e6),  # WiFi-based, wider bandwidth
+        'bandwidth_range': (15e6, 80e6),  # WiFi-based, wider bandwidth
         'manufacturer': 'DJI',
-        'description': 'DJI Phantom/Mavic RC Control (All models)',
+        'description': 'DJI Phantom 1 & 2 RC Control',
         'confidence_boost': 35,
         'power_range': (-70, -25)
     },
     
-    'JETI_Dual_Band_2.4GHz': {
+    'dji_phantom_3_4_rc_channels_2400': {
+        'start': 2.400e9,
+        'end': 2.483e9,
+        'type': 'control',
+        'bandwidth_range': (20e6, 80e6),
+        'manufacturer': 'DJI',
+        'description': 'DJI Phantom 3 & 4 RC Control',
+        'confidence_boost': 35,
+        'power_range': (-70, -25)
+    },
+    
+    'dji_phantom4_pro_rc_channels_2400': {
+        'start': 2.400e9,
+        'end': 2.483e9,
+        'type': 'control',
+        'bandwidth_range': (20e6, 80e6),
+        'manufacturer': 'DJI',
+        'description': 'DJI Phantom 4 PRO RC Control',
+        'confidence_boost': 35,
+        'power_range': (-70, -25)
+    },
+    
+    'dji_rc_channels_2400': {
+        'start': 2.400e9,
+        'end': 2.483e9,
+        'type': 'control',
+        'bandwidth_range': (20e6, 80e6),
+        'manufacturer': 'DJI',
+        'description': 'DJI Generic RC Channels (2.4GHz)',
+        'confidence_boost': 30,
+        'power_range': (-70, -25)
+    },
+    
+    # ===== JETI CONTROL SYSTEMS =====
+    'jeti_dc_2400': {
         'start': 2.400e9,
         'end': 2.483e9,
         'type': 'control',
         'bandwidth_range': (1e6, 20e6),  # Narrow band RC
         'manufacturer': 'JETI',
-        'description': 'JETI DC-24 Dual Band RC (2.4GHz)',
-        'confidence_boost': 25,
+        'description': 'JETI DC-24 Dual Band (2.4GHz)',
+        'confidence_boost': 30,
         'power_range': (-75, -30)
     },
     
-    'JETI_Dual_Band_868MHz': {
+    'jeti_dc_900': {
         'start': 863.7e6,
         'end': 869.0e6,
         'type': 'control',
         'bandwidth_range': (200e3, 5e6),  # Very narrow band
         'manufacturer': 'JETI',
-        'description': 'JETI DC-24 Dual Band RC (868MHz EU)',
-        'confidence_boost': 30,
+        'description': 'JETI DC-24 Dual Band (868MHz EU)',
+        'confidence_boost': 35,
         'power_range': (-80, -35)
     },
     
-    '915MHz_ISM': {
+    # ===== ISM BANDS =====
+    '915mhz_ism_band': {
         'start': 902e6,
         'end': 928e6,
         'type': 'control',
-        'bandwidth_range': (500e3, 10e6),
+        'bandwidth_range': (500e3, 15e6),
         'manufacturer': 'Generic',
         'description': '915MHz ISM Band RC Control (US)',
-        'confidence_boost': 25,
+        'confidence_boost': 30,
         'power_range': (-80, -30)
     },
     
-    'AD223_900MHz': {
+    'ad223_900mhz': {
         'start': 893e6,
         'end': 1.020e9,
         'type': 'control',
         'bandwidth_range': (1e6, 20e6),
         'manufacturer': 'Generic',
         'description': 'AD223 900MHz Long Range RC',
-        'confidence_boost': 20,
+        'confidence_boost': 25,
         'power_range': (-85, -35)
     },
     
-    '433MHz_ISM': {
-        'start': 433e6,
-        'end': 434.8e6,
-        'type': 'control',
-        'bandwidth_range': (100e3, 2e6),  # Very narrow
+    # ===== COMBINED PROFILE =====
+    'Drones': {
+        'start': 2.400e9,
+        'end': 5.880e9,
+        'type': 'mixed',
+        'bandwidth_range': (1e6, 80e6),
         'manufacturer': 'Generic',
-        'description': '433MHz ISM Long Range RC',
-        'confidence_boost': 25,
-        'power_range': (-90, -40)
+        'description': 'All Drone Frequencies (Wide Scan)',
+        'confidence_boost': 20,
+        'power_range': (-85, -25)
     }
 }
 
@@ -142,7 +179,7 @@ def match_drone_profile(frequency, bandwidth, power):
         bw_min, bw_max = profile['bandwidth_range']
         if bw_min <= bandwidth <= bw_max:
             confidence += 30
-        elif bandwidth < bw_min * 2 or bandwidth > bw_max * 0.5:
+        elif bw_min * 0.5 <= bandwidth <= bw_max * 2:
             # Close but not perfect
             confidence += 15
         
@@ -266,13 +303,13 @@ def analyze_for_drones(spectrum_data):
                 
                 if matched:
                     drone_score += profile_confidence
-                    reasons.append(f"Matches {profile_name} profile ({profile_confidence}% confidence)")
+                    reasons.append(f"Matches {profile_name}")
                     reasons.append(f"Manufacturer: {profile_data['manufacturer']}")
                     reasons.append(f"Type: {profile_data['type'].upper()}")
                 
                 if is_burst:
                     drone_score += 20
-                    reasons.append(f"Burst pattern detected ({burst_confidence}% confidence)")
+                    reasons.append(f"Burst pattern detected")
                 
                 # Bandwidth validation
                 bw_mhz = signal_bandwidth / 1e6
@@ -280,12 +317,12 @@ def analyze_for_drones(spectrum_data):
                     bw_min, bw_max = profile_data['bandwidth_range']
                     if bw_min/1e6 <= bw_mhz <= bw_max/1e6:
                         drone_score += 20
-                        reasons.append(f"Bandwidth matches: {bw_mhz:.1f} MHz")
+                        reasons.append(f"Bandwidth: {bw_mhz:.1f} MHz")
                 
                 characteristics['drone_score'] = min(drone_score, 100)  # Cap at 100%
                 characteristics['detection_reasons'] = reasons
                 
-                # Lower threshold: 50% confidence (was 70%)
+                # Threshold: 50% confidence
                 if drone_score >= 50:
                     detections.append(characteristics)
             
@@ -322,12 +359,12 @@ def analyze_for_drones(spectrum_data):
         
         if matched:
             drone_score += profile_confidence
-            reasons.append(f"Matches {profile_name} profile ({profile_confidence}% confidence)")
+            reasons.append(f"Matches {profile_name}")
             reasons.append(f"Manufacturer: {profile_data['manufacturer']}")
         
         if is_burst:
             drone_score += 20
-            reasons.append(f"Burst pattern ({burst_confidence}%)")
+            reasons.append(f"Burst pattern")
         
         characteristics['drone_score'] = min(drone_score, 100)
         characteristics['detection_reasons'] = reasons

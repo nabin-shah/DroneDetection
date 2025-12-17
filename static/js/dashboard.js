@@ -196,23 +196,23 @@ function loadManualCaptures() {
 
 
 
-// Scan Control Functions
-function updateScanStatus() {
-    fetch('/api/auto_scan/status')
-        .then(response => response.json())
-        .then(data => {
-            if (data.active) {
-                document.getElementById('scanStatus').textContent = 'Active ✓';
-                document.getElementById('scanStatus').style.color = '#00ff00';
-                document.getElementById('currentBand').textContent = data.current_band;
-            } else {
-                document.getElementById('scanStatus').textContent = 'Stopped';
-                document.getElementById('scanStatus').style.color = '#ff4444';
-                document.getElementById('currentBand').textContent = 'Manual Mode';
-            }
-        })
-        .catch(err => console.error('Scan status error:', err));
-}
+// // Scan Control Functions
+// function updateScanStatus() {
+//     fetch('/api/auto_scan/status')
+//         .then(response => response.json())
+//         .then(data => {
+//             if (data.active) {
+//                 document.getElementById('scanStatus').textContent = 'Active ✓';
+//                 document.getElementById('scanStatus').style.color = '#00ff00';
+//                 document.getElementById('currentBand').textContent = data.current_band;
+//             } else {
+//                 document.getElementById('scanStatus').textContent = 'Stopped';
+//                 document.getElementById('scanStatus').style.color = '#ff4444';
+//                 document.getElementById('currentBand').textContent = 'Manual Mode';
+//             }
+//         })
+//         .catch(err => console.error('Scan status error:', err));
+// }
 
 function startAutoScan() {
     fetch('/api/auto_scan/start')
@@ -373,24 +373,151 @@ function handleDetection(detection) {
     }
 }
 
-// Initialize on page load
+// ==========================================
+// FREQUENCY SCANNER CONTROLS
+// ==========================================
+
+let scannerStatusInterval = null;
+
+function toggleScanner() {
+    const button = document.getElementById('toggleScanBtn');
+    const isScanning = button.textContent.includes('Stop');
+    
+    const endpoint = isScanning ? '/api/scanner/stop' : '/api/scanner/start';
+    
+    fetch(endpoint, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateScannerStatus();
+            }
+        })
+        .catch(err => console.error('Scanner toggle error:', err));
+}
+
+function updateScannerStatus() {
+    fetch('/api/scanner/status')
+        .then(response => response.json())
+        .then(data => {
+            const statusDiv = document.getElementById('scannerStatus');
+            const button = document.getElementById('toggleScanBtn');
+            
+            if (data.scanning) {
+                button.textContent = '⏸️ Stop Auto-Scan';
+                button.className = 'btn-stop';
+                
+                statusDiv.innerHTML = `
+                    <div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 15px; border-radius: 8px; border-left: 4px solid #00ff00;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <span style="font-size: 24px;">${data.icon}</span>
+                            <div>
+                                <div style="font-weight: bold; font-size: 16px; color: #00ff00;">
+                                    ${data.current_band}
+                                </div>
+                                <div style="font-size: 12px; color: #aaa;">
+                                    ${data.description}
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #ddd; margin-top: 8px;">
+                            <span>Center: ${(data.center_frequency / 1e9).toFixed(3)} GHz</span>
+                            <span>Span: ${(data.span / 1e6).toFixed(1)} MHz</span>
+                        </div>
+                        <div style="margin-top: 8px;">
+                            <div style="background: rgba(0,0,0,0.3); height: 4px; border-radius: 2px; overflow: hidden;">
+                                <div style="background: #00ff00; height: 100%; width: ${((data.current_band_index + 1) / data.total_bands) * 100}%; transition: width 0.3s;"></div>
+                            </div>
+                            <div style="font-size: 11px; color: #888; text-align: center; margin-top: 4px;">
+                                Band ${data.current_band_index + 1} of ${data.total_bands} • Dwell: ${data.dwell_time}s
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                button.textContent = '🔄 Start Auto-Scan';
+                button.className = 'btn-primary';
+                
+                statusDiv.innerHTML = `
+                    <div style="padding: 15px; text-align: center; color: #888; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                        <div style="font-size: 32px; margin-bottom: 8px;">⏸️</div>
+                        <div>Auto-scan stopped</div>
+                        <div style="font-size: 12px; margin-top: 5px;">Click "Start Auto-Scan" to begin</div>
+                    </div>
+                `;
+            }
+        })
+        .catch(err => console.error('Scanner status error:', err));
+}
+
+function loadFrequencyBands() {
+    fetch('/api/scanner/bands')
+        .then(response => response.json())
+        .then(data => {
+            const container = document.getElementById('frequencyBands');
+            
+            let html = '<div style="display: grid; grid-template-columns: 1fr; gap: 8px;">';
+            
+            data.bands.forEach((band, index) => {
+                html += `
+                    <button onclick="setManualBand(${index})" 
+                            style="padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); 
+                                   border-radius: 5px; cursor: pointer; text-align: left; color: white; transition: all 0.2s;"
+                            onmouseover="this.style.background='rgba(255,255,255,0.2)'" 
+                            onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 20px;">${band.icon}</span>
+                            <div style="flex: 1;">
+                                <div style="font-weight: bold; font-size: 13px;">${band.name}</div>
+                                <div style="font-size: 11px; color: #aaa;">${(band.center / 1e9).toFixed(3)} GHz</div>
+                            </div>
+                        </div>
+                    </button>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        })
+        .catch(err => console.error('Bands error:', err));
+}
+
+function setManualBand(bandIndex) {
+    fetch(`/api/scanner/set_band/${bandIndex}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log(`✅ Switched to band ${bandIndex}`);
+                updateScannerStatus();
+            }
+        })
+        .catch(err => console.error('Set band error:', err));
+}
+
+
+
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Dashboard initializing...');
     
-    // Start all updates
+    // Dashboard updates
     updateDashboard();
     setInterval(updateDashboard, 1000);
     
-    updateScanStatus();
-    setInterval(updateScanStatus, 2000);
+    // OLD: Remove these if you had them
+    // updateScanStatus();
+    // setInterval(updateScanStatus, 2000);
     
-    // updateCameraPreview();
-    // setInterval(updateCameraPreview, 2000);
-     loadManualCaptures();
+    // NEW: Scanner updates
+    updateScannerStatus();
+    setInterval(updateScannerStatus, 2000);
+    
+    // Load frequency bands
+    loadFrequencyBands();
+    
+    // Manual captures
+    loadManualCaptures();
     setInterval(loadManualCaptures, 5000);
     
-    updateRecentCaptures();
-    setInterval(updateRecentCaptures, 5000);
-    
-    console.log('Dashboard ready!');
+    console.log('✅ Dashboard ready with auto-scanner!');
 });
+

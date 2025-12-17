@@ -42,7 +42,7 @@
       </div>
     </div>
 
-    <div class="info-section">
+    <!-- <div class="info-section">
       <h2>🔄 Band Scanning Control</h2>
       <div class="scan-controls">
         <button onclick="startAutoScan()" class="btn btn-start">
@@ -60,7 +60,7 @@
           <div class="scan-info-value" id="scanStatus">Stopped</div>
         </div>
       </div>
-    </div>
+    </div> -->
 
     <div class="info-section">
       <h2>Spectrum Data</h2>
@@ -183,3 +183,44 @@
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
   </body>
 </html>
+
+<!-- Frequency Scanner Controls -->
+<div class="card">
+  <h2>🔄 Auto Frequency Scanner</h2>
+
+  <div style="margin-bottom: 15px">
+    <button
+      id="toggleScanBtn"
+      onclick="toggleScanner()"
+      class="btn-primary"
+      style="width: 100%; padding: 12px; font-size: 16px; font-weight: bold"
+    >
+      🔄 Start Auto-Scan
+    </button>
+  </div>
+
+  <div id="scannerStatus" style="margin-bottom: 15px">
+    <div
+      style="
+        padding: 15px;
+        text-align: center;
+        color: #888;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+      "
+    >
+      <div style="font-size: 32px; margin-bottom: 8px">⏸️</div>
+      <div>Auto-scan stopped</div>
+      <div style="font-size: 12px; margin-top: 5px">
+        Click "Start Auto-Scan" to begin
+      </div>
+    </div>
+  </div>
+
+  <h3
+    style="margin-top: 20px; margin-bottom: 10px; font-size: 14px; color: #aaa"
+  >
+    Manual Band Selection
+  </h3>
+  <div id="frequencyBands"></div>
+</div>

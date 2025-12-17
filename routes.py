@@ -486,3 +486,66 @@ def register_routes(app):
         return send_from_directory(CAPTURE_FOLDER, filename)
 
 
+    # ==========================================
+    # FREQUENCY SCANNER ROUTES
+    # ==========================================
+    
+    @app.route('/api/scanner/start', methods=['POST'])
+    def scanner_start():
+        """Start automatic frequency scanning"""
+        from frequency_scanner import scanner
+        
+        success = scanner.start()
+        return jsonify({
+            'success': success,
+            'message': 'Scanner started' if success else 'Scanner already running'
+        })
+    
+    @app.route('/api/scanner/stop', methods=['POST'])
+    def scanner_stop():
+        """Stop automatic frequency scanning"""
+        from frequency_scanner import scanner
+        
+        success = scanner.stop()
+        return jsonify({
+            'success': success,
+            'message': 'Scanner stopped' if success else 'Scanner not running'
+        })
+    
+    @app.route('/api/scanner/status')
+    def scanner_status():
+        """Get scanner status"""
+        from frequency_scanner import scanner
+        
+        status = scanner.get_status()
+        return jsonify(status)
+    
+    @app.route('/api/scanner/bands')
+    def scanner_bands():
+        """Get list of frequency bands"""
+        from frequency_scanner import scanner
+        
+        bands = scanner.get_bands()
+        return jsonify({'bands': bands})
+    
+    @app.route('/api/scanner/set_band/<int:band_index>', methods=['POST'])
+    def scanner_set_band(band_index):
+        """Manually set to specific band"""
+        from frequency_scanner import scanner
+        
+        success = scanner.set_band(band_index)
+        return jsonify({
+            'success': success,
+            'band_index': band_index
+        })
+    
+    @app.route('/api/scanner/set_dwell/<int:seconds>', methods=['POST'])
+    def scanner_set_dwell(seconds):
+        """Set dwell time per band"""
+        from frequency_scanner import scanner
+        
+        success = scanner.set_dwell_time(seconds)
+        return jsonify({
+            'success': success,
+            'dwell_time': seconds
+        })
