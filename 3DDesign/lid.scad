@@ -1,45 +1,35 @@
-// --- GLOBAL PARAMETERS ---
-$fn = 32;
-box_w = 160;
-box_d = 120;
-box_h = 110; // Tall enough to clear the 100mm rod
+// FILE: 02_Lid_Independent.scad
+
+$fn = 64;
 wall = 3;
+box_w = 280; box_d = 160; corner_r = 5;
+mech_center = [180, 80, wall];
 
-// Placement coordinates
-arduino_pos = [10, 10];
-mech_center = [100, 60];
-mesh_dist = 13.5; 
-
-// --- TOGGLE VIEW ---
-// Set to 1 for Box, 2 for Lid, 3 for Both (Exploded)
-view_mode = 2; 
-
-if (view_mode == 1 || view_mode == 3) main_box();
-if (view_mode == 2) lid();
-if (view_mode == 3) translate([0, 0, box_h + 20]) lid();
-
-
-module lid() {
+union() {
     difference() {
-        union() {
-            // Main flat lid
-            cube([box_w, box_d, wall]);
-            // Lip to keep it from sliding
-            translate([wall+0.5, wall+0.5, -wall])
-                difference() {
-                    cube([box_w-wall*2-1, box_d-wall*2-1, wall]);
-                    translate([wall, wall, -1]) 
-                        cube([box_w-wall*4-1, box_d-wall*4-1, wall+2]);
-                }
+        rounded_block(box_w, box_d, wall, corner_r);
+        translate([mech_center[0], mech_center[1], -1]) cylinder(h=wall+2, d=10.5);
+    }
+    // Locking Inset Rim
+    translate([wall + 0.5, wall + 0.5, -wall])
+    difference() {
+        rounded_block(box_w - wall*2 - 1, box_d - wall*2 - 1, wall, corner_r - 1.5);
+        translate([2, 2, -1]) rounded_block(box_w - wall*2 - 5, box_d - wall*2 - 5, wall + 2, corner_r - 2);
+        translate([mech_center[0]-50, mech_center[1]-50, -1]) cube([100, 100, wall+2]);
+    }
+    // Upper Bearing Hub
+    translate([mech_center[0], mech_center[1], -5.2])
+        difference() {
+            cylinder(h=5.2, d=25);
+            translate([0,0,-0.1]) cylinder(h=5.4, d=19.1);
         }
-        
-        // 1. LED HOLE (Top Center)
-        translate([box_w/2, 20, -1]) 
-            cylinder(h=wall+2, r=2.55); // 5.1mm hole for 5mm LED
-            
-        // 2. GEAR ROD TOP SUPPORT HOLE
-        // This acts as a "bushing" to keep the rod vertical
-        translate([mech_center[0], mech_center[1], -1])
-            cylinder(h=wall+2, r=8.5); // Slightly larger than gear radius
+}
+
+module rounded_block(w, d, h, r) {
+    hull() {
+        translate([r, r, 0]) cylinder(h=h, r=r);
+        translate([w-r, r, 0]) cylinder(h=h, r=r);
+        translate([w-r, d-r, 0]) cylinder(h=h, r=r);
+        translate([r, d-r, 0]) cylinder(h=h, r=r);
     }
 }
