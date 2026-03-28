@@ -29,8 +29,19 @@ scan_interval = 5  # seconds per band
 
 def log_detection(detection_data, spectrum_data):
     """Log a drone detection event with timestamp and capture image"""
+    
+    # --- NEW: Disable the old backend logger ---
+    # The frontend WebRTC camera now handles 100% of the captures and logging!
+    return 
+    # -------------------------------------------
+    
     if not detection_data.get('detected'):
         return
+    
+    # NEW: If the synchronized radar is running, we let the frontend handle 
+    # the capture and logging so we can perfectly sync the physical angle and camera!
+    if radar_sync.is_scanning:
+        return 
     
     # Capture image if camera is enabled
     image_filename = capture_image(detection_data)
@@ -278,10 +289,25 @@ def register_routes(app):
 
     @app.route('/api/detection_history')
     def get_detection_history():
-        """Get recent detection history"""
+        """Get recent detection history directly from the saved JSON file"""
+        log_file = 'drone_detections.json'
+        history = []
+        
+        # Read directly from the file to survive server restarts
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, 'r') as f:
+                    history = json.load(f)
+            except json.JSONDecodeError:
+                history = []
+        
+        # Keep the global memory list synced just in case
+        global detection_history
+        detection_history = history[-MAX_HISTORY:] if history else []
+        
         return jsonify({
-            'total': len(detection_history),
-            'detections': detection_history[-20:]
+            'total': len(history),
+            'detections': history[-20:] # Return the 20 most recent for the UI
         })
 
     @app.route('/api/detection_history/clear')
@@ -308,6 +334,68 @@ def register_routes(app):
     # ==========================================
     # MANUAL CAMERA CAPTURE ROUTES (NEW)
     # ==========================================
+
+    @app.route('/api/camera/auto_capture', methods=['POST'])
+    def auto_capture():
+        """Automatically called by the dashboard when a drone is detected during a radar sweep"""
+        import base64
+        try:
+            data = request.get_json()
+            image_data = data.get('image')
+            
+            if 'base64,' in image_data:
+                image_data = image_data.split('base64,')[1]
+            
+            image_bytes = base64.b64decode(image_data)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"radar_detect_{timestamp}.jpg"
+            
+            if not os.path.exists(CAPTURE_FOLDER):
+                os.makedirs(CAPTURE_FOLDER)
+            
+            # Save the image file
+            filepath = os.path.join(CAPTURE_FOLDER, filename)
+            with open(filepath, 'wb') as f:
+                f.write(image_bytes)
+                
+            # Create the JSON log entry with ALL details
+            log_entry = {
+                'timestamp': datetime.now().isoformat(),
+                'unix_time': time.time(),
+                'image': filename,
+                'angle': data.get('angle', 0),
+                'frequency': data.get('frequency', 0),
+                'power': data.get('power', 0),
+                'band': data.get('band', 'Unknown'),
+                'confidence': data.get('score', 0)
+            }
+            
+            # Update global history in memory
+            detection_history.append(log_entry)
+            if len(detection_history) > MAX_HISTORY:
+                detection_history.pop(0)
+                
+            # Save directly to the JSON file (No Database Required!)
+            log_file = 'drone_detections.json'
+            if os.path.exists(log_file):
+                with open(log_file, 'r') as f:
+                    try:
+                        all_logs = json.load(f)
+                    except json.JSONDecodeError:
+                        all_logs = []
+            else:
+                all_logs = []
+                
+            all_logs.append(log_entry)
+            with open(log_file, 'w') as f:
+                json.dump(all_logs, f, indent=2)
+                
+            print(f"🚨 [Radar Auto-Capture] Saved: {filename} at {data.get('angle')}°")
+            return jsonify({'success': True, 'filename': filename})
+            
+        except Exception as e:
+            print(f"❌ [Auto-Capture] Error: {e}")
+            return jsonify({'error': str(e)}), 500
     
     @app.route('/api/camera/manual_capture', methods=['POST'])
     def manual_capture():

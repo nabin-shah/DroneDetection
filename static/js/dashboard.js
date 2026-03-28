@@ -1,5 +1,6 @@
 // Drone Detection Dashboard JavaScript
 
+let lastAutoCaptureTime = 0; // Prevents spamming photos
 let lastDataTime = null;
 let frozenDataCount = 0;
 let connectionErrorCount = 0;
@@ -328,6 +329,12 @@ function updateStatusDisplay(status) {
 function handleDetection(detection) {
     if (!detection) return;
     
+    // --- NEW: IGNORE DETECTIONS IF RADAR IS OFF ---
+    if (!isRadarActive) {
+        return; 
+    }
+    // ----------------------------------------------
+    
     if (detection.detected) {
         document.getElementById('detectionIndicator').className = 
             'status-indicator detecting';
@@ -372,6 +379,15 @@ function handleDetection(detection) {
             timestamp: Date.now()
         });
         // ----------------------
+        
+        // --- NEW: AUTO CAPTURE LOGIC ---
+        const now = Date.now();
+        // Only capture if Radar is ON, Camera is ON, and 5 seconds have passed
+        if (isRadarActive && myStream && (now - lastAutoCaptureTime > 5000)) {
+            lastAutoCaptureTime = now;
+            performAutoCapture(strongest, targetRadarAngle);
+        }
+        // -------------------------------
         
         updateRecentCaptures();
         
@@ -512,6 +528,11 @@ function toggleRadarSync() {
     const button = document.getElementById('toggleRadarBtn');
     const isScanning = button.textContent.includes('Stop');
     
+    // NEW: Automatically start the camera if we are starting the radar!
+    if (!isScanning && !myStream) {
+        startCam(); 
+    }
+    
     const endpoint = isScanning ? '/api/radar/stop' : '/api/radar/start';
     
     fetch(endpoint, { method: 'POST' })
@@ -563,6 +584,19 @@ function updateRadarStatus() {
                 `;
             } else {
                 isRadarActive = false; // NEW: Stops the canvas sweeping line
+                
+                // --- NEW: STOP CAMERA AND CLEAR ALERTS ---
+                if (myStream) {
+                    stopCam(); // Turn off the webcam
+                }
+                
+                // Reset the detection UI immediately
+                document.getElementById('detectionIndicator').className = 'status-indicator connected';
+                document.getElementById('detectionStatus').textContent = 'Radar Stopped';
+                document.getElementById('alertBox').classList.remove('active');
+                document.getElementById('noAlerts').style.display = 'block';
+                // -----------------------------------------
+
                 button.disabled = false;
                 button.textContent = '▶️ Start Hardware Radar Sync';
                 button.style.background = '#00aaff';
@@ -604,6 +638,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Manual captures
     loadManualCaptures();
     setInterval(loadManualCaptures, 5000);
+    
+    // --- NEW: FETCH HISTORICAL DETECTIONS ON PAGE LOAD ---
+    updateRecentCaptures();
+    // -----------------------------------------------------
     
     console.log('✅ Dashboard ready with auto-scanner!');
 });
@@ -708,8 +746,169 @@ function animateRadar() {
     requestAnimationFrame(animateRadar);
 }
 
+
+
+// Automatically snaps a photo, burns text on it, and saves to JSON
+function performAutoCapture(strongestSignal, angleRad) {
+    const video = document.getElementById('myVideo');
+    if (!video.videoWidth) return; // Camera not ready
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    
+    // Draw the camera frame
+    ctx.drawImage(video, 0, 0);
+
+    // Calculate degrees
+    const degrees = Math.round(angleRad * (180 / Math.PI));
+    const freqGHz = (strongestSignal.frequency / 1e9).toFixed(3);
+
+    // Burn "DRONE DETECTED" and the exact Angle/Frequency onto the image!
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.fillRect(0, 0, canvas.width, 100); // Dark background at top for readability
+    
+    ctx.fillStyle = "#ff4444";
+    ctx.font = "bold 28px Arial";
+    ctx.fillText("🚨 DRONE DETECTED", 20, 40);
+    
+    ctx.fillStyle = "#00ff00";
+    ctx.font = "20px monospace";
+    ctx.fillText(`Angle: ${degrees}° | Freq: ${freqGHz} GHz`, 20, 80);
+
+    // Convert to base64
+    const imageData = canvas.toDataURL('image/jpeg', 0.90);
+
+    // Send to the new backend route
+    fetch('/api/camera/auto_capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            image: imageData,
+            angle: degrees,
+            frequency: strongestSignal.frequency,
+            power: strongestSignal.power,
+            band: strongestSignal.matched_profile ? strongestSignal.profile_name : 'Unknown',
+            score: strongestSignal.drone_score
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if(data.success) {
+            updateRecentCaptures(); // Refresh the UI immediately
+        }
+    })
+    .catch(e => console.error("Auto-capture error:", e));
+}
+
+// Update the UI function to display the Angle beautifully
+function updateRecentCaptures() {
+    fetch('/api/detection_history')
+        .then(response => response.json())
+        .then(data => {
+            
+            // --- NEW: Also update the text log! ---
+            updateDetectionsTextLog(data);
+            // --------------------------------------
+
+            const container = document.getElementById('recentCaptures');
+            
+            if (data.total === 0 || !data.detections) {
+                container.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">No captures yet</p>';
+                return;
+            }
+            
+            const detectionsWithImages = data.detections.filter(d => d.image && d.image.startsWith('radar_detect'));
+            
+            if (detectionsWithImages.length === 0) {
+                container.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">No radar captures yet</p>';
+                return;
+            }
+            
+            let html = '';
+            // Show the 5 most recent drone detections
+            detectionsWithImages.reverse().slice(0, 5).forEach(detection => {
+                const time = new Date(detection.timestamp).toLocaleTimeString();
+                const freq = (detection.frequency / 1e9).toFixed(3);
+                const angle = detection.angle !== undefined ? `${detection.angle}°` : 'Unknown';
+                
+                html += `
+                    <div class="capture-item" style="border: 1px solid #ff4444;">
+                        <img src="/api/captures/${detection.image}" 
+                             onclick="window.open('/api/captures/${detection.image}', '_blank')"
+                             title="Click to view full size">
+                        <div class="capture-info" style="display: flex; flex-direction: column; gap: 4px;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: #00ff00; font-weight: bold;">⏱️ ${time}</span>
+                                <span style="color: #ffaa00; font-weight: bold;">🧭 ${angle}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: #aaa;">📡 ${freq} GHz</span>
+                                <span style="color: #aaa;">Confidence: ${detection.confidence}%</span>
+                            </div>
+                            <div style="color: #00aaff; font-size: 10px;">🏷️ Band: ${detection.band}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        })
+        .catch(err => console.error('Captures error:', err));
+}
+
+
+
 // Start the animation loop
 if (canvas && ctx) {
     animateRadar();
 }
+
+// NEW: Renders a clean, professional text-based log of detections
+function updateDetectionsTextLog(data) {
+    const logContainer = document.getElementById('recentDetectionsLog');
+    
+    if (!data || data.total === 0 || !data.detections || data.detections.length === 0) {
+        logContainer.innerHTML = '<p style="color: #888; text-align: center; padding: 20px;">No detections yet</p>';
+        return;
+    }
+
+    let html = '<ul style="list-style: none; padding: 0; margin: 0;">';
+    
+    // Grab the 15 most recent detections, reverse them so newest is on top
+    const recentLogs = [...data.detections].reverse().slice(0, 15);
+
+    recentLogs.forEach(d => {
+        const time = new Date(d.timestamp).toLocaleTimeString();
+        const freq = (d.frequency / 1e9).toFixed(3);
+        const angle = d.angle !== undefined ? `${d.angle}°` : '--';
+        const power = d.power ? d.power.toFixed(1) : '--';
+        const band = d.band || 'Unknown Signal';
+
+        html += `
+            <li style="padding: 12px 0; border-bottom: 1px solid #444; font-family: monospace; font-size: 13px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="color: #00ff00; font-weight: bold;">[${time}]</span>
+                    <span style="color: #00aaff; font-weight: bold; text-align: right;">${band}</span>
+                </div>
+                <div style="color: #ccc; display: flex; flex-direction: column; gap: 4px; padding-left: 10px; border-left: 2px solid #555;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #888;">Freq:</span> <span>${freq} GHz</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #888;">Angle:</span> <span style="color: #ffaa00;">${angle}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #888;">Power:</span> <span>${power} dBm</span>
+                    </div>
+                </div>
+            </li>
+        `;
+    });
+    
+    html += '</ul>';
+    logContainer.innerHTML = html;
+}
+
 

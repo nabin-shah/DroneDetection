@@ -148,81 +148,53 @@
         </div>
       </div>
 
-      <h2>📷 Camera Feed</h2>
-      <div class="camera-grid">
-        <div class="camera-preview-container">
+      <h2>📷 Camera Feed & Logs</h2>
+      <div class="camera-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; align-items: start;">
+        
+        <div class="camera-preview-container" style="background: #3a3a3a; padding: 15px; border-radius: 5px; text-align: center;">
           <h3 style="margin-bottom: 10px">Live Camera Preview</h3>
           <div
             class="camera-preview"
             style="
               position: relative;
               background: #000;
-              min-height: 360px;
+              width: 100%;
+              aspect-ratio: 4/3;
+              margin: 0 auto;
               border-radius: 8px;
               overflow: hidden;
+              box-shadow: 0 4px 10px rgba(0,0,0,0.5);
             "
           >
-            <video
-              id="myVideo"
-              autoplay
-              playsinline
-              muted
-              style="width: 100%; height: 100%; object-fit: contain"
-            ></video>
-            <div
-              id="cameraPlaceholder"
-              style="
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: #666;
-                flex-direction: column;
-                background: rgba(0, 0, 0, 0.8);
-              "
-            >
-              <div style="font-size: 48px; margin-bottom: 10px">📹</div>
-              <div>Click "Start Camera" below</div>
+            <video id="myVideo" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: contain"></video>
+            <div id="cameraPlaceholder" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #666; flex-direction: column; background: rgba(0, 0, 0, 0.8);">
+              <div style="font-size: 32px; margin-bottom: 10px">📹</div>
+              <div style="font-size: 14px;">Click "Start Camera"</div>
             </div>
           </div>
-          <div class="camera-controls">
-            <button
-              onclick="startCam()"
-              class="btn-refresh"
-              style="background: #00ff00; color: #000"
-            >
-              📹 Start Camera
-            </button>
-            <button
-              onclick="stopCam()"
-              class="btn-refresh"
-              style="background: #ff4444; color: #fff"
-            >
-              ⏹ Stop
-            </button>
-            <button
-              onclick="takePhoto()"
-              class="btn-refresh"
-              style="background: #00aaff; color: #fff"
-            >
-              📸 Capture
-            </button>
-            <div id="cameraStatusText">Status: Stopped</div>
+          
+          <div class="camera-controls" style="justify-content: center; margin-top: 15px; flex-wrap: wrap;">
+            <button onclick="startCam()" class="btn-refresh" style="background: #00ff00; color: #000">📹 Start</button>
+            <button onclick="stopCam()" class="btn-refresh" style="background: #ff4444; color: #fff">⏹ Stop</button>
+            <button onclick="takePhoto()" class="btn-refresh" style="background: #00aaff; color: #fff">📸 Capture</button>
+            <div id="cameraStatusText" style="width: 100%; padding-top: 10px; color: #888;">Status: Stopped</div>
           </div>
         </div>
 
-        <div class="captures-container">
+        <div class="captures-container" style="background: #3a3a3a; padding: 15px; border-radius: 5px;">
           <h3 style="margin-bottom: 10px">Recent Captures</h3>
-          <div id="recentCaptures">
-            <p style="color: #888; text-align: center; padding: 20px">
-              No captures yet
-            </p>
+          <div id="recentCaptures" style="max-height: 400px; overflow-y: auto; padding-right: 5px;">
+            <p style="color: #888; text-align: center; padding: 20px">No captures yet</p>
           </div>
         </div>
+
+        <div class="detections-log-container" style="background: #3a3a3a; padding: 15px; border-radius: 5px;">
+          <h3 style="margin-bottom: 10px">Recent Detections Log</h3>
+          <div id="recentDetectionsLog" style="max-height: 400px; overflow-y: auto; padding-right: 5px;">
+            <p style="color: #888; text-align: center; padding: 20px">No detections yet</p>
+          </div>
+        </div>
+
       </div>
     </div>
 
