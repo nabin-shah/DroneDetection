@@ -362,6 +362,17 @@ function handleDetection(detection) {
         `;
         document.getElementById('detectionDetails').innerHTML = detailsHTML;
         
+        // --- NEW RADAR CODE ---
+        // We now use targetRadarAngle, which is the exact physical 
+        // angle reported by the Arduino at this exact millisecond!
+        blips.push({
+            angle: targetRadarAngle, 
+            power: strongest.power,
+            band: strongest.matched_profile ? strongest.profile_name : 'Unknown',
+            timestamp: Date.now()
+        });
+        // ----------------------
+        
         updateRecentCaptures();
         
     } else {
@@ -493,7 +504,79 @@ function setManualBand(bandIndex) {
         .catch(err => console.error('Set band error:', err));
 }
 
+// ==========================================
+// SYNCHRONIZED RADAR LOGIC
+// ==========================================
 
+function toggleRadarSync() {
+    const button = document.getElementById('toggleRadarBtn');
+    const isScanning = button.textContent.includes('Stop');
+    
+    const endpoint = isScanning ? '/api/radar/stop' : '/api/radar/start';
+    
+    fetch(endpoint, { method: 'POST' })
+        .then(response => {
+            if (response.status === 503) {
+                alert("Cannot start: Arduino is not connected. Check your COM port!");
+                throw new Error("Arduino not connected");
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                updateRadarStatus();
+            }
+        })
+        .catch(err => console.error('Radar toggle error:', err));
+}
+
+function updateRadarStatus() {
+    fetch('/api/radar/status')
+        .then(response => response.json())
+        .then(data => {
+            // --- NEW LINE: Save the physical angle (converted to radians) ---
+            targetRadarAngle = data.current_angle * (Math.PI / 180); 
+            // ----------------------------------------------------------------
+            
+            const statusDiv = document.getElementById('radarSyncStatus');
+            const button = document.getElementById('toggleRadarBtn');
+            const statusText = document.getElementById('radarStatusText');
+            
+            if (!data.arduino_connected) {
+                button.disabled = true;
+                button.style.background = '#555';
+                button.textContent = '❌ Arduino Disconnected';
+                return;
+            }
+
+            if (data.is_scanning) {
+                isRadarActive = true; // NEW: Starts the canvas sweeping line
+                button.textContent = '⏹️ Stop Hardware Sync';
+                button.style.background = '#ff4444';
+                
+                statusDiv.innerHTML = `
+                    <div style="padding: 15px; text-align: center; color: #00ff00; background: rgba(0, 255, 0, 0.1); border-radius: 8px; border: 1px solid #00ff00;">
+                        <div style="font-size: 32px; margin-bottom: 8px; animation: pulse 1s infinite;">📡</div>
+                        <div style="font-weight: bold;">Hardware Sync Active</div>
+                        <div style="font-size: 12px; margin-top: 5px; color: #aaa;">Antenna and RTSA are sweeping in tandem...</div>
+                    </div>
+                `;
+            } else {
+                isRadarActive = false; // NEW: Stops the canvas sweeping line
+                button.disabled = false;
+                button.textContent = '▶️ Start Hardware Radar Sync';
+                button.style.background = '#00aaff';
+                
+                statusDiv.innerHTML = `
+                    <div style="padding: 15px; text-align: center; color: #888; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                        <div style="font-size: 32px; margin-bottom: 8px;">⏸️</div>
+                        <div>Hardware sync stopped</div>
+                    </div>
+                `;
+            }
+        })
+        .catch(err => console.error('Radar status error:', err));
+}
 
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -510,6 +593,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // NEW: Scanner updates
     updateScannerStatus();
     setInterval(updateScannerStatus, 2000);
+
+    // RADAR SYNC updates
+    updateRadarStatus();
+    setInterval(updateRadarStatus, 200);
     
     // Load frequency bands
     loadFrequencyBands();
@@ -520,4 +607,109 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log('✅ Dashboard ready with auto-scanner!');
 });
+
+// ==========================================
+// LIVE CANVAS RADAR SCREEN
+// ==========================================
+
+const canvas = document.getElementById('radarCanvas');
+const ctx = canvas.getContext('2d');
+
+let targetRadarAngle = 0;   // The true physical angle from Arduino
+let currentRadarAngle = 0;  // The visual angle on screen
+let isRadarActive = false;
+let blips = []; 
+
+// Draw the static radar grid (Semi-circle)
+function drawRadarGrid() {
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height;
+    const radius = canvas.width / 2 - 20;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw concentric distance rings
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i <= 4; i++) {
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius * (i / 4), Math.PI, 0);
+        ctx.stroke();
+    }
+
+    // Draw angle lines (30, 60, 90, 120, 150 degrees)
+    for (let i = 1; i <= 5; i++) {
+        const angle = Math.PI - (i * Math.PI / 6);
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(centerX + Math.cos(angle) * radius, centerY - Math.sin(angle) * radius);
+        ctx.stroke();
+    }
+}
+
+// Animate the sweeping line and draw blips
+function animateRadar() {
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height;
+    const radius = canvas.width / 2 - 20;
+
+    drawRadarGrid(); // Uses the function we wrote previously
+
+    if (isRadarActive) {
+        // --- TRUE SYNCHRONIZATION (Linear Interpolation) ---
+        // Instead of guessing speed, the visual line smoothly follows the physical antenna.
+        // The "0.1" makes it glide smoothly even if network packets are delayed.
+        currentRadarAngle += (targetRadarAngle - currentRadarAngle) * 0.1;
+
+        // Draw the sweeping scanner beam exactly where the antenna is
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        const endX = centerX + Math.cos(Math.PI - currentRadarAngle) * radius;
+        const endY = centerY - Math.sin(Math.PI - currentRadarAngle) * radius;
+        ctx.lineTo(endX, endY);
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Optional: Draw text showing the exact physical degree
+        ctx.fillStyle = '#00ff00';
+        ctx.font = '14px monospace';
+        const degreeText = Math.round(currentRadarAngle * (180 / Math.PI)) + "°";
+        ctx.fillText("Antenna: " + degreeText, 10, 20);
+    }
+
+    // 2. Draw and fade detection blips (Same as before)
+    const currentTime = Date.now();
+    blips = blips.filter(blip => currentTime - blip.timestamp < 5000); 
+
+    blips.forEach(blip => {
+        const age = currentTime - blip.timestamp;
+        const opacity = 1 - (age / 5000);
+        
+        const powerRange = Math.max(0, Math.min(1, (blip.power + 90) / 60)); 
+        const distance = radius - (powerRange * radius); 
+
+        const blipX = centerX + Math.cos(Math.PI - blip.angle) * distance;
+        const blipY = centerY - Math.sin(Math.PI - blip.angle) * distance;
+
+        ctx.beginPath();
+        ctx.arc(blipX, blipY, 6, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 0, 0, ${opacity})`; 
+        ctx.fill();
+        ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+        ctx.font = '10px Arial';
+        ctx.fillText(blip.band, blipX + 10, blipY);
+    });
+
+    requestAnimationFrame(animateRadar);
+}
+
+// Start the animation loop
+if (canvas && ctx) {
+    animateRadar();
+}
 

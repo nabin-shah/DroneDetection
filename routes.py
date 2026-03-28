@@ -13,6 +13,8 @@ from threading import Thread
 from detection import analyze_for_drones
 from camera import init_camera, capture_image, get_camera_status, CAPTURE_FOLDER,get_camera_frame
 
+from radar_sync import radar_sync # Imports the global instance from our new file
+
 # RTSA HTTP Server configuration
 RTSA_HOST = 'http://localhost:54664'
 
@@ -97,7 +99,9 @@ def auto_scan_bands():
 
 def register_routes(app):
     """Register all routes with the Flask app"""
-    
+    #########################################################
+
+    #########################################################
     @app.route('/api/spectrum')
     def get_spectrum():
         """Fetch spectrum data from RTSA and return as JSON"""
@@ -548,4 +552,32 @@ def register_routes(app):
         return jsonify({
             'success': success,
             'dwell_time': seconds
+        })
+    
+    # ==========================================
+    # SYNCHRONIZED RADAR CONTROLS
+    # ==========================================
+    
+    @app.route('/api/radar/start', methods=['POST'])
+    def radar_start():
+        """Start the synchronized Antenna + RTSA sweep"""
+        if not radar_sync.arduino:
+            return jsonify({'success': False, 'message': 'Arduino not connected!'}), 503
+            
+        radar_sync.start()
+        return jsonify({'success': True, 'message': 'Synchronized radar started'})
+
+    @app.route('/api/radar/stop', methods=['POST'])
+    def radar_stop():
+        """Stop the synchronized sweep"""
+        radar_sync.stop()
+        return jsonify({'success': True, 'message': 'Synchronized radar stopped'})
+
+    @app.route('/api/radar/status')
+    def radar_status():
+        """Get the current status of the synchronized sweep"""
+        return jsonify({
+            'is_scanning': radar_sync.is_scanning,
+            'arduino_connected': radar_sync.arduino is not None,
+            'current_angle': radar_sync.current_angle
         })

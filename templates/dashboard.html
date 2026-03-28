@@ -102,6 +102,52 @@
     </div>
 
     <div class="info-section">
+      <!-- Frequency Scanner Controls -->
+      <div class="card" style="border-left: 5px solid #00aaff; margin-bottom: 20px;">
+        <h2>📡 Hardware-Synchronized Radar</h2>
+        <p style="color: #aaa; font-size: 12px; margin-bottom: 15px;">
+          Coordinates Arduino Antenna Sweeps with RTSA Frequency Profiles
+        </p>
+
+        <div style="margin-bottom: 15px">
+          <button
+            id="toggleRadarBtn"
+            onclick="toggleRadarSync()"
+            class="btn-primary"
+            style="width: 100%; padding: 12px; font-size: 16px; font-weight: bold; background: #00aaff; color: white; border: none; border-radius: 5px; cursor: pointer;"
+          >
+            ▶️ Start Hardware Radar Sync
+          </button>
+        </div>
+
+        <div id="radarSyncStatus" style="margin-bottom: 15px">
+          <div
+            style="
+              padding: 15px;
+              text-align: center;
+              color: #888;
+              background: rgba(255, 255, 255, 0.05);
+              border-radius: 8px;
+            "
+          >
+            <div style="font-size: 32px; margin-bottom: 8px;">⏸️</div>
+            <div id="radarStatusText">Hardware sync stopped</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h2>🎯 Live Spatial Radar (0° - 180°)</h2>
+        <div style="position: relative; width: 100%; background: #000a00; border-radius: 8px; border: 2px solid #003300; padding: 20px; overflow: hidden; display: flex; justify-content: center;">
+          
+          <canvas id="radarCanvas" width="600" height="300" style="max-width: 100%; height: auto; box-shadow: 0 0 20px rgba(0, 255, 0, 0.2); border-bottom: 2px solid #00ff00;"></canvas>
+          
+          <div style="position: absolute; bottom: 10px; left: 30px; color: #00ff00; font-family: monospace; font-size: 14px;">180° (West)</div>
+          <div style="position: absolute; bottom: 10px; right: 30px; color: #00ff00; font-family: monospace; font-size: 14px;">0° (East)</div>
+          <div style="position: absolute; top: 30px; left: 50%; transform: translateX(-50%); color: #00ff00; font-family: monospace; font-size: 14px;">90° (North)</div>
+        </div>
+      </div>
+
       <h2>📷 Camera Feed</h2>
       <div class="camera-grid">
         <div class="camera-preview-container">
@@ -183,44 +229,3 @@
     <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
   </body>
 </html>
-
-<!-- Frequency Scanner Controls -->
-<div class="card">
-  <h2>🔄 Auto Frequency Scanner</h2>
-
-  <div style="margin-bottom: 15px">
-    <button
-      id="toggleScanBtn"
-      onclick="toggleScanner()"
-      class="btn-primary"
-      style="width: 100%; padding: 12px; font-size: 16px; font-weight: bold"
-    >
-      🔄 Start Auto-Scan
-    </button>
-  </div>
-
-  <div id="scannerStatus" style="margin-bottom: 15px">
-    <div
-      style="
-        padding: 15px;
-        text-align: center;
-        color: #888;
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 8px;
-      "
-    >
-      <div style="font-size: 32px; margin-bottom: 8px">⏸️</div>
-      <div>Auto-scan stopped</div>
-      <div style="font-size: 12px; margin-top: 5px">
-        Click "Start Auto-Scan" to begin
-      </div>
-    </div>
-  </div>
-
-  <h3
-    style="margin-top: 20px; margin-bottom: 10px; font-size: 14px; color: #aaa"
-  >
-    Manual Band Selection
-  </h3>
-  <div id="frequencyBands"></div>
-</div>

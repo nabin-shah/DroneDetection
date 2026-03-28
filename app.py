@@ -31,4 +31,5 @@ if __name__ == '__main__':
     print("\nDashboard: http://localhost:5000")
     print("=" * 50)
     
-    app.run(debug=True, port=5000)
+    # app.run(debug=True, port=5000)
+    app.run(debug=True, use_reloader=False, port=5000)
